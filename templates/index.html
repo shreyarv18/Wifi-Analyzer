@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WiFi Analyzer</title>
+  <style>
+    /* Reset some basic styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 20px;
+    }
+
+    .container {
+      background: #fff;
+      padding: 30px 40px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 900px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+      letter-spacing: 1.2px;
+    }
+
+    button#analyzeBtn {
+      background: linear-gradient(135deg, #4a90e2, #007aff);
+      border: none;
+      padding: 14px 32px;
+      font-size: 18px;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(74, 144, 226, 0.4);
+      transition: background 0.3s ease, transform 0.2s ease;
+      margin-bottom: 28px;
+    }
+
+    button#analyzeBtn:disabled {
+      background: #a0b8f7;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    button#analyzeBtn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #3578e5, #005ecf);
+      transform: translateY(-2px);
+    }
+
+    #loading {
+      font-style: italic;
+      margin-bottom: 16px;
+      color: #666;
+      font-size: 16px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.08);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    thead {
+      background: #007aff;
+      color: white;
+    }
+
+    th, td {
+      padding: 12px 18px;
+      text-align: left;
+      font-weight: 500;
+      border-bottom: 1px solid #e1e8f4;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fbff;
+    }
+
+    tbody tr:hover {
+      background: #d6e4ff;
+      cursor: default;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 20px 15px;
+      }
+
+      button#analyzeBtn {
+        width: 100%;
+        padding: 14px;
+        font-size: 16px;
+      }
+
+      table, thead, tbody, th, td, tr {
+        display: block;
+      }
+
+      thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+      }
+
+      tbody tr {
+        border: 1px solid #ddd;
+        margin-bottom: 12px;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff;
+      }
+
+      tbody td {
+        border: none;
+        position: relative;
+        padding-left: 50%;
+        text-align: right;
+        font-size: 14px;
+      }
+
+      tbody td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 16px;
+        width: 45%;
+        padding-left: 15px;
+        font-weight: 700;
+        text-align: left;
+        color: #555;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WiFi Analyzer</h1>
+    <button id="analyzeBtn" onclick="startAnalysis()">Start Analysis</button>
+
+    <div id="loading" class="hidden">Analyzing WiFi networks...</div>
+
+    <table id="resultsTable" class="hidden" aria-live="polite">
+      <thead>
+        <tr>
+          <th>SSID</th>
+          <th>BSSID</th>
+          <th>Signal (%)</th>
+          <th>Encryption</th>
+          <th>Security Risk</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function startAnalysis() {
+      const btn = document.getElementById('analyzeBtn');
+      const loading = document.getElementById('loading');
+      const table = document.getElementById('resultsTable');
+      const tbody = document.getElementById('resultsBody');
+
+      btn.disabled = true;
+      btn.textContent = 'Analyzing...';
+      loading.classList.remove('hidden');
+      table.classList.add('hidden');
+      tbody.innerHTML = '';
+
+      try {
+        const response = await fetch('/analyze');
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+
+        if (data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No WiFi networks found.</td></tr>`;
+        } else {
+          for (const network of data) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td data-label="SSID">${network.SSID}</td>
+              <td data-label="BSSID">${network.BSSID}</td>
+              <td data-label="Signal">${network.Signal || 'N/A'}</td>
+              <td data-label="Encryption">${network.Encryption || 'Unknown'}</td>
+              <td data-label="Security Risk">${network['Security Risk'] || '❓ Unknown'}</td>
+            `;
+            tbody.appendChild(row);
+          }
+        }
+
+        table.classList.remove('hidden');
+      } catch (err) {
+        alert('Error fetching WiFi data: ' + err.message);
+      } finally {
+        loading.classList.add('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Start Analysis';
+      }
+    }
+  </script>
+</body>
+</html>
