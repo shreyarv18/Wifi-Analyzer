@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WiFi Analyzer</title>
+  <title>WiFi Analyzer with Selectable Signal Graph</title>
   <style>
-    /* Reset some basic styles */
+    /* Reset and styling same as before */
     * {
       box-sizing: border-box;
       margin: 0;
@@ -50,7 +50,7 @@
       cursor: pointer;
       box-shadow: 0 5px 15px rgba(74, 144, 226, 0.4);
       transition: background 0.3s ease, transform 0.2s ease;
-      margin-bottom: 28px;
+      margin-bottom: 16px;
     }
 
     button#analyzeBtn:disabled {
@@ -81,6 +81,7 @@
       box-shadow: 0 0 12px rgba(0, 0, 0, 0.08);
       border-radius: 10px;
       overflow: hidden;
+      margin-bottom: 24px;
     }
 
     thead {
@@ -102,6 +103,22 @@
     tbody tr:hover {
       background: #d6e4ff;
       cursor: default;
+    }
+
+    #ssidSelector {
+      margin-bottom: 16px;
+      font-size: 16px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      width: 100%;
+      max-width: 300px;
+      cursor: pointer;
+    }
+
+    #signalGraph {
+      border: 1px solid #ccc;
+      border-radius: 8px;
     }
 
     @media (max-width: 600px) {
@@ -153,6 +170,8 @@
       }
     }
   </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="container">
@@ -173,51 +192,170 @@
       </thead>
       <tbody id="resultsBody"></tbody>
     </table>
+
+    <select id="ssidSelector" class="hidden" aria-label="Select WiFi SSID to show signal graph"></select>
+
+    <canvas id="signalGraph" width="800" height="300"></canvas>
   </div>
 
   <script>
-    async function startAnalysis() {
+    let wifiData = [];
+    let signalHistory = [];
+    const maxPoints = 30;
+
+    const ctx = document.getElementById('signalGraph').getContext('2d');
+    let chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Signal Strength',
+          data: [],
+          borderColor: '#007aff',
+          fill: false,
+          tension: 0.2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        scales: {
+          y: {
+            min: 0,
+            max: 100,
+            title: {
+              display: true,
+              text: 'Signal Strength (%)'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Time'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            labels: {
+              font: { size: 14 }
+            }
+          }
+        }
+      }
+    });
+
+    function startAnalysis() {
       const btn = document.getElementById('analyzeBtn');
       const loading = document.getElementById('loading');
       const table = document.getElementById('resultsTable');
       const tbody = document.getElementById('resultsBody');
+      const ssidSelector = document.getElementById('ssidSelector');
 
       btn.disabled = true;
       btn.textContent = 'Analyzing...';
       loading.classList.remove('hidden');
       table.classList.add('hidden');
       tbody.innerHTML = '';
+      ssidSelector.classList.add('hidden');
+      ssidSelector.innerHTML = '';
+      signalHistory = [];
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.data.datasets[0].label = 'Signal Strength';
+      chart.update();
 
-      try {
-        const response = await fetch('/analyze');
-        if (!response.ok) throw new Error('Network response was not ok');
-        const data = await response.json();
+      fetch('/analyze')
+        .then(res => {
+          if (!res.ok) throw new Error('Network response was not ok');
+          return res.json();
+        })
+        .then(data => {
+          wifiData = data;
 
-        if (data.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No WiFi networks found.</td></tr>`;
-        } else {
-          for (const network of data) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td data-label="SSID">${network.SSID}</td>
-              <td data-label="BSSID">${network.BSSID}</td>
-              <td data-label="Signal">${network.Signal || 'N/A'}</td>
-              <td data-label="Encryption">${network.Encryption || 'Unknown'}</td>
-              <td data-label="Security Risk">${network['Security Risk'] || '❓ Unknown'}</td>
-            `;
-            tbody.appendChild(row);
+          if (wifiData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No WiFi networks found.</td></tr>`;
+            ssidSelector.classList.add('hidden');
+          } else {
+            // Populate table
+            wifiData.forEach(network => {
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                <td data-label="SSID">${network.SSID}</td>
+                <td data-label="BSSID">${network.BSSID}</td>
+                <td data-label="Signal">${network.Signal || 'N/A'}</td>
+                <td data-label="Encryption">${network.Encryption || 'Unknown'}</td>
+                <td data-label="Security Risk">${network['Security Risk'] || '❓ Unknown'}</td>
+              `;
+              tbody.appendChild(row);
+            });
+
+            // Populate dropdown
+            ssidSelector.innerHTML = '<option value="">Select WiFi SSID to graph</option>';
+            wifiData.forEach(network => {
+              const option = document.createElement('option');
+              option.value = network.SSID;
+              option.textContent = network.SSID;
+              ssidSelector.appendChild(option);
+            });
+
+            ssidSelector.classList.remove('hidden');
           }
-        }
-
-        table.classList.remove('hidden');
-      } catch (err) {
-        alert('Error fetching WiFi data: ' + err.message);
-      } finally {
-        loading.classList.add('hidden');
-        btn.disabled = false;
-        btn.textContent = 'Start Analysis';
-      }
+          table.classList.remove('hidden');
+        })
+        .catch(err => alert('Error fetching WiFi data: ' + err.message))
+        .finally(() => {
+          btn.disabled = false;
+          btn.textContent = 'Start Analysis';
+          loading.classList.add('hidden');
+        });
     }
+
+    document.getElementById('ssidSelector').addEventListener('change', (e) => {
+      const selectedSSID = e.target.value;
+      signalHistory = [];
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.data.datasets[0].label = selectedSSID || 'Signal Strength';
+      chart.update();
+    });
+
+    function updateGraph() {
+      if (!wifiData.length) return;
+
+      const ssidSelector = document.getElementById('ssidSelector');
+      const selectedSSID = ssidSelector.value;
+      if (!selectedSSID) return; // no SSID selected, don't update graph
+
+      // Fetch fresh data every time for latest signals
+      fetch('/analyze')
+        .then(res => res.json())
+        .then(data => {
+          wifiData = data;
+
+          // Find signal strength for selected SSID
+          const network = wifiData.find(n => n.SSID === selectedSSID);
+          const signalVal = network ? parseInt(network.Signal) || 0 : 0;
+
+          const time = new Date().toLocaleTimeString();
+
+          if (chart.data.labels.length >= maxPoints) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+          }
+
+          chart.data.labels.push(time);
+          chart.data.datasets[0].data.push(signalVal);
+          chart.update();
+        })
+        .catch(console.error);
+    }
+
+    // Update graph every 1 second
+    setInterval(updateGraph, 3000);
   </script>
 </body>
 </html>
